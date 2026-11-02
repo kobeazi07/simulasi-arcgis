@@ -34,5 +34,14 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    // arcgis
+    'arcgis' => [
+        'client_id' => env('ARCGIS_CLIENT_ID'),
+        'client_secret' => env('ARCGIS_CLIENT_SECRET'),
+        'redirect_uri' => env('ARCGIS_REDIRECT_URI'),
+        'portal' => env('ARCGIS_PORTAL'),
+        'feature_layer_url' => env('ARCGIS_FEATURE_LAYER_URL'),
+    ],
+
 
 ];
