@@ -32,23 +32,18 @@
 
         #viewDiv {
             width: 100%;
-            height: calc(100vh - 60px);
-        }
-
-        #viewDiv {
-            width: 100%;
             height: 100vh;
         }
 
         #layer-panel {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
+            top: 75px;
+            right: 20px;
+            z-index: 100;
             width: 260px;
-            background: white;
+            background: #fff;
             border-radius: 8px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
             overflow: hidden;
         }
 
@@ -56,6 +51,7 @@
             padding: 15px;
             border-bottom: 1px solid #ddd;
             font-size: 15px;
+            font-weight: bold;
         }
 
         .layer-item {
@@ -71,31 +67,21 @@
         }
 
         .layer-eye {
+            width: 30px;
             border: none;
             background: transparent;
             cursor: pointer;
             font-size: 18px;
-            width: 25px;
         }
 
         .layer-name {
-            font-size: 13px;
             flex: 1;
-        }
-
-        #viewDiv {
-            width: 100%;
-            height: 100vh;
-            min-height: 500px;
+            font-size: 13px;
         }
     </style>
 </head>
 
 <body>
-
-    <div class="header">
-        <h3>WebGIS Irigasi - ArcGIS Online</h3>
-    </div>
     <div id="layer-panel">
         <div class="layer-header">
             <strong>Daftar Layer</strong>
@@ -115,14 +101,8 @@
             "esri/geometry/Polygon"
         ], function(Map, MapView, GraphicsLayer, Graphic, Polygon) {
 
-            const graphicsLayer = new GraphicsLayer({
-                title: "Areal Kerja PT SMD",
-                visible: true
-            });
-
             const map = new Map({
-                basemap: "topo-vector",
-                layers: [graphicsLayer]
+                basemap: "topo-vector"
             });
 
             const view = new MapView({
@@ -132,67 +112,132 @@
                 zoom: 12
             });
 
-            // Ambil data dari Laravel
+            const layerObjects = [];
+
             fetch('/arcgis/features')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("HTTP Error: " + response.status);
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
 
-                    console.log("Data ArcGIS:", data);
-
                     if (!data.features || data.features.length === 0) {
-                        console.warn("Tidak ada data shape.");
+                        console.warn("Data shape tidak ditemukan.");
                         return;
                     }
 
-                    data.features.forEach(feature => {
+                    let shapeNumber = 0;
 
-                        if (!feature.geometry || !feature.geometry.rings) {
-                            console.warn("Geometry tidak ditemukan:", feature);
-                            return;
-                        }
+                    data.features.forEach((feature, featureIndex) => {
 
-                        const polygon = new Polygon({
-                            rings: feature.geometry.rings,
-                            spatialReference: {
-                                wkid: 4326
-                            }
-                        });
+                        const rings = feature.geometry?.rings ?? [];
 
-                        const graphic = new Graphic({
-                            geometry: polygon,
-                            attributes: feature.attributes,
-                            symbol: {
-                                type: "simple-fill",
-                                color: [0, 150, 100, 0.35],
-                                outline: {
-                                    color: [0, 100, 70, 1],
-                                    width: 2
+                        // Setiap ring dibuat sebagai shape terpisah.
+                        rings.forEach((ring, ringIndex) => {
+
+                            shapeNumber++;
+
+                            const graphicsLayer = new GraphicsLayer({
+                                title: `Shape ${shapeNumber}`,
+                                visible: true
+                            });
+
+                            const polygon = new Polygon({
+                                rings: [ring],
+                                spatialReference: {
+                                    wkid: 4326
                                 }
-                            },
-                            popupTemplate: {
-                                title: "Areal Kerja PT SMD",
-                                content: "Luas: {luas}"
-                            }
-                        });
+                            });
 
-                        graphicsLayer.add(graphic);
+                            const graphic = new Graphic({
+                                geometry: polygon,
+                                attributes: feature.attributes,
+                                symbol: {
+                                    type: "simple-fill",
+                                    color: [0, 150, 100, 0.35],
+                                    outline: {
+                                        color: [0, 100, 70, 1],
+                                        width: 2
+                                    }
+                                },
+                                popupTemplate: {
+                                    title: `Shape ${shapeNumber}`,
+                                    content: `Luas: ${feature.attributes.luas ?? '-'}`
+                                }
+                            });
+
+                            graphicsLayer.add(graphic);
+                            map.add(graphicsLayer);
+
+                            layerObjects.push({
+                                id: shapeNumber,
+                                name: `Shape ${shapeNumber}`,
+                                layer: graphicsLayer,
+                                visible: true
+                            });
+
+                        });
                     });
 
-                    // Arahkan peta ke lokasi shape
-                    if (graphicsLayer.graphics.length > 0) {
-                        view.goTo(graphicsLayer.graphics).catch(error => {
-                            console.error("Gagal mengarahkan peta:", error);
-                        });
+                    renderLayerPanel();
+
+                    // Zoom ke seluruh shape
+                    const allGraphics = layerObjects.flatMap(item =>
+                        item.layer.graphics.toArray()
+                    );
+
+                    if (allGraphics.length > 0) {
+                        view.goTo(allGraphics);
                     }
+
                 })
                 .catch(error => {
                     console.error("Gagal memuat shape:", error);
                 });
+
+
+            // Membuat daftar layer
+            function renderLayerPanel() {
+
+                const layerList = document.getElementById('layer-list');
+
+                layerList.innerHTML = '';
+
+                layerObjects.forEach(item => {
+
+                    const row = document.createElement('div');
+                    row.className = 'layer-item';
+
+                    const button = document.createElement('button');
+                    button.className = 'layer-eye';
+
+                    button.innerHTML = item.visible ? '👁️' : '🚫';
+                    button.title = item.visible ?
+                        'Sembunyikan shape' :
+                        'Tampilkan shape';
+
+                    const name = document.createElement('span');
+                    name.className = 'layer-name';
+                    name.textContent = item.name;
+
+                    button.addEventListener('click', function() {
+
+                        item.visible = !item.visible;
+
+                        item.layer.visible = item.visible;
+
+                        button.innerHTML = item.visible ? '👁️' : '🚫';
+
+                        button.title = item.visible ?
+                            'Sembunyikan shape' :
+                            'Tampilkan shape';
+
+                    });
+
+                    row.appendChild(button);
+                    row.appendChild(name);
+
+                    layerList.appendChild(row);
+
+                });
+            }
 
         });
     </script>
